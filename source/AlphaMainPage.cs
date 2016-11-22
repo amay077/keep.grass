@@ -151,7 +151,7 @@ namespace keep.grass
 		protected override void OnAppearing()
 		{
 			base.OnAppearing();
-			UpdateInfoAsync().Wait(0);
+			UpdateInfoAsync()?.Wait(0);
 			StartUpdateLeftTimeTask();
 		}
 
@@ -209,7 +209,7 @@ namespace keep.grass
 				ClearActiveInfo();
 			}
 
-			for (var i = 0; i < Friends.Count(); ++i)
+			for (var i = 0; i < Friends?.Count(); ++i)
 			{
 				var Friend = Settings.GetFriend(i);
 				if (Friends[i].Text != Friend)
