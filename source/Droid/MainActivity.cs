@@ -9,7 +9,6 @@ using Android.Widget;
 using Android.OS;
 
 using ImageCircle.Forms.Plugin.Droid;
-using HockeyApp.Android;
 
 namespace keep.grass.Droid
 {
@@ -29,7 +28,6 @@ namespace keep.grass.Droid
 		protected override void OnCreate(Bundle bundle)
 		{
 			base.OnCreate(bundle);
-			CrashManager.Register(this, Variables.HOCKEYAPP_API_KEY);
 
 			global::Xamarin.Forms.Forms.Init(this, bundle);
 			LoadApplication(MakeSureApp());
