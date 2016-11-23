@@ -2,6 +2,7 @@
 using Android.App;
 using Android.Content;
 using Android.Graphics;
+using HockeyApp.Android;
 using Xamarin.Forms;
 
 namespace keep.grass.Droid
@@ -12,6 +13,7 @@ namespace keep.grass.Droid
 		public override void OnCreate()
 		{
 			base.OnCreate();
+			CrashManager.Register(this, Variables.HOCKEYAPP_APP_ID);
 			global::Xamarin.Forms.Forms.Init(this, null);
 		}
 
