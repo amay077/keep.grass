@@ -2,6 +2,7 @@
 using Android.App;
 using Android.Content;
 using Android.Graphics;
+using HockeyApp.Android;
 using Xamarin.Forms;
 
 namespace keep.grass.Droid
@@ -9,6 +10,12 @@ namespace keep.grass.Droid
 	[Service]
 	public class AlarmIntentService :IntentService
 	{
+		public override void OnCreate()
+		{
+			base.OnCreate();
+			CrashManager.Register(this, Variables.HOCKEYAPP_APP_ID);
+		}
+
 		protected override void OnHandleIntent(Intent intent)
 		{
 			Debug.WriteLine("AlarmIntentService::OnHandleIntent()");
