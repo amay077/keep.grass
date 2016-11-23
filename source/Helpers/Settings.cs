@@ -238,7 +238,7 @@ namespace keep.grass.Helpers
 			Set(AlertTimeSpanToSettingKey(Key), NewValue);
 		}
 
-		public static TimeSpan AlertDailyTimeUnit = TimeSpan.FromMinutes(10);
+		public static TimeSpan AlertDailyTimeUnit = TimeSpan.FromMinutes(30);
 		public static TimeSpan[] AlertDailyTimeTable = Enumerable.Range
 		(
 			0,
