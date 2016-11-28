@@ -44,6 +44,20 @@ namespace keep.grass
 				Friends = Settings.GetFriendList().Select(i => AlphaFactory.MakeCircleImageCell()).ToArray();
 			}
 
+			if (Friends.Any())
+			{
+				CircleGraph
+					.AsView()
+					.GestureRecognizers
+					.Add
+					(
+						new TapGestureRecognizer()
+						{
+							Command = new Command(o => AlphaFactory.MakeSureApp().ShowDetailPage(Settings.UserName)),
+						}
+					);
+			}
+
 			UserLabel.Command = Friends.Any() ?
 				new Command(o => AlphaFactory.MakeSureApp().ShowDetailPage(Settings.UserName)):
 				new Command(o => AlphaFactory.MakeSureApp().ShowSettingsPage());
@@ -55,10 +69,10 @@ namespace keep.grass
 				BackgroundColor = Color.White,
 				Root = new TableRoot
 				{
-					new TableSection(L["Github Account"])
+					/*new TableSection(L["Github Account"])
 					{
 						UserLabel,
-					},
+					},*/
 					new TableSection(L["Rivals"])
 					{
 						Friends,
@@ -255,49 +269,6 @@ namespace keep.grass
 			LastActivityStampLabel.Text = "";
 			LeftTimeLabel.Text = "";
 		}
-		public IEnumerable<TimePie> MakeSlices(TimeSpan LeftTime, Color LeftTimeColor)
-		{
-			if (0 <= LeftTime.Ticks)
-			{
-				//	※調整しておなかいと、表示上、経過時間と残り時間の合計が24時間より1秒足りない状態になってしまうので。
-				var JustifiedLeftTime = new TimeSpan(LeftTime.Days, +LeftTime.Hours, LeftTime.Minutes, LeftTime.Seconds);
-				var JustifiedElapsedTime = TimeSpan.FromDays(1) - JustifiedLeftTime;
-
-				return new[]
-				{
-					new TimePie
-					{
-						Text = L["Left Time"],
-						Value = JustifiedLeftTime,
-						Color = LeftTimeColor,
-					},
-					new TimePie
-					{
-						Text = L["Elapsed Time"],
-						Value = JustifiedElapsedTime,
-						Color = Color.FromRgb(0xAA, 0xAA, 0xAA),
-					},
-				};
-			}
-			else
-			{
-				return new[]
-				{
-					new TimePie
-					{
-						Text = L["Left Time"],
-						Value = TimeSpan.FromTicks(0),
-						Color = Color.FromRgb(0xD6, 0xE6, 0x85),
-					},
-					new TimePie
-					{
-						Text = L["Elapsed Time"],
-						Value = TimeSpan.FromDays(1),
-						Color = Color.FromRgb(0xEE, 0x11, 0x11),
-					},
-				};
-			}
-		}
 
 		public void StartUpdateLeftTimeTask(bool IsPersistently = true)
 		{
@@ -337,15 +308,6 @@ namespace keep.grass
 			UpdateLeftTimeTask = null;
 		}
 
-		public Color MakeLeftTimeColor(TimeSpan LeftTime)
-		{
-			double LeftTimeRate = Math.Max(0.0, Math.Min(1.0, LeftTime.TotalHours / 24.0));
-			byte red = (byte)(255.0 * (1.0 - LeftTimeRate));
-			byte green = (byte)(255.0 * Math.Min(0.5, LeftTimeRate));
-			byte blue = 0;
-			return  Color.FromRgb(red, green, blue);
-		}
-
 		protected void UpdateLeftTime()
 		{
 			CircleGraph.SetStartAngle(TimeToAngle(DateTime.Now));
@@ -356,12 +318,12 @@ namespace keep.grass
 				var LimitTime = Domain.LastPublicActivity.AddHours(24);
 				var LeftTime = LimitTime - Now;
 				LeftTimeLabel.Text = Math.Floor(LeftTime.TotalHours).ToString() +LeftTime.ToString("\\:mm\\:ss");
-				var LeftTimeColor = MakeLeftTimeColor(LeftTime);
+				var LeftTimeColor = AlphaDomain.MakeLeftTimeColor(LeftTime);
 
 				LeftTimeLabel.TextColor = LeftTimeColor;
 
 				CircleGraph.SetStartAngle(TimeToAngle(Now));
-				CircleGraph.Data = MakeSlices(LeftTime, LeftTimeColor);
+				CircleGraph.Data = AlphaDomain.MakeSlices(LeftTime, LeftTimeColor);
 
 				if (Friends?.Any() ?? false)
 				{
@@ -369,41 +331,7 @@ namespace keep.grass
 				}
 				else
 				{
-					CircleGraph.SatelliteTexts = Enumerable.Range(0, 24).Select
-					(
-						i => new
-						{
-							Hour = i,
-							Time = Today + TimeSpan.FromHours(i),
-						}
-					)
-					.Select
-					(
-						i => new
-						{
-							Hour = i.Hour,
-							Time = i.Time.Ticks < Domain.LastPublicActivity.Ticks ?
-									i.Time + TimeSpan.FromDays(1) :
-									(
-										TimeSpan.FromDays(1).Ticks < (i.Time - Domain.LastPublicActivity).Ticks ?
-										i.Time - TimeSpan.FromDays(1) :
-										i.Time
-									),
-						}
-					)
-					.Select
-					(
-						i => new CircleGraphSatelliteText
-						{
-							Text = i.Hour.ToString(),
-							Color = LeftTime.Ticks <= 0 ?
-								MakeLeftTimeColor(LeftTime) :
-								i.Time.Ticks < Now.Ticks ?
-									 Color.Gray :
-									MakeLeftTimeColor(LimitTime - i.Time),
-							Angle = 360.0f * ((float)(i.Hour) / 24.0f),
-						}
-					);
+					CircleGraph.SatelliteTexts = AlphaDomain.MakeSatelliteTexts(Now, Domain.LastPublicActivity);
 				}
 
 				Task.Run(() => Domain.AutoUpdateLastPublicActivityAsync());
@@ -416,7 +344,7 @@ namespace keep.grass
 					StopUpdateLeftTimeTask();
 				}*/
 
-				CircleGraph.Data = MakeSlices(TimeSpan.Zero, Color.Lime);
+				CircleGraph.Data = AlphaDomain.MakeSlices(TimeSpan.Zero, Color.Lime);
 				CircleGraph.SatelliteTexts = Enumerable.Range(0, 24).Select
 				(
 					i => new CircleGraphSatelliteText
@@ -430,5 +358,6 @@ namespace keep.grass
 			CircleGraph.Update();
 			//Debug.WriteLine("AlphaMainPage::UpdateLeftTime::LeftTime = " +LeftTimeLabel.Text);
 		}
+
 	}
 }
