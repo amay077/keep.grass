@@ -14,14 +14,17 @@ namespace keep.grass
 		Languages.AlphaLanguage L = AlphaFactory.MakeSureLanguage();
 		AlphaDomain Domain = AlphaFactory.MakeSureDomain();
 
-		AlphaCircleImageCell UserLabel = AlphaFactory.MakeCircleImageCell();
 		AlphaCircleImageCell[] Friends;
 		AlphaActivityIndicatorTextCell LastActivityStampLabel = AlphaFactory.MakeActivityIndicatorTextCell();
 		AlphaActivityIndicatorTextCell LeftTimeLabel = AlphaFactory.MakeActivityIndicatorTextCell();
 		AlphaCircleGraph CircleGraph = AlphaFactory.MakeCircleGraph();
+		AlphaActivityIndicatorButton UpdateButton = AlphaFactory.MakeActivityIndicatorButton();
 
 		Task UpdateLeftTimeTask = null;
 		DateTime UpdateLeftTimeTaskLastStamp = default(DateTime);
+
+		DateTime OldNow = default(DateTime);
+		DateTime OldLastPublicActivity = default(DateTime);
 
 		public AlphaMainPage()
 		{
@@ -29,7 +32,24 @@ namespace keep.grass
 
 			LastActivityStampLabel.Command = new Command(async o => await Domain.ManualUpdateLastPublicActivityAsync());
 			//LeftTimeLabel.Command = new Command(async o => await Domain.ManualUpdateLastPublicActivityAsync());
+			UpdateButton.Command = new Command(async o => await Domain.ManualUpdateLastPublicActivityAsync());
 			//Build();
+
+			CircleGraph.IsDoughnut = true;
+
+			var Now = DateTime.Now;
+			OldNow = new[]
+			{
+				OldNow,
+				Now.AddDays(-1),
+			}
+			.Max();
+			OldLastPublicActivity = new[]
+			{
+				Domain.GetLastPublicActivity(Settings.UserName),
+				Now.AddDays(-1),
+			}
+			.Max();
 		}
 
 		public override void Build()
@@ -44,24 +64,16 @@ namespace keep.grass
 				Friends = Settings.GetFriendList().Select(i => AlphaFactory.MakeCircleImageCell()).ToArray();
 			}
 
-			if (Friends.Any())
-			{
-				CircleGraph
-					.AsView()
-					.GestureRecognizers
-					.Add
-					(
-						new TapGestureRecognizer()
-						{
-							Command = new Command(o => AlphaFactory.MakeSureApp().ShowDetailPage(Settings.UserName)),
-						}
-					);
-			}
-
-			UserLabel.Command = Friends.Any() ?
-				new Command(o => AlphaFactory.MakeSureApp().ShowDetailPage(Settings.UserName)):
-				new Command(o => AlphaFactory.MakeSureApp().ShowSettingsPage());
-
+			CircleGraph
+				.AsView()
+				.GestureRecognizers
+				.Add
+				(
+					new TapGestureRecognizer()
+					{
+						Command = new Command(o => AlphaFactory.MakeSureApp().ShowDetailPage(Settings.UserName)),
+					}
+				);
 
 			var MainTable = Friends.Any() ?
 			new TableView
@@ -69,10 +81,6 @@ namespace keep.grass
 				BackgroundColor = Color.White,
 				Root = new TableRoot
 				{
-					/*new TableSection(L["Github Account"])
-					{
-						UserLabel,
-					},*/
 					new TableSection(L["Rivals"])
 					{
 						Friends,
@@ -84,10 +92,6 @@ namespace keep.grass
 				BackgroundColor = Color.White,
 				Root = new TableRoot
 				{
-					new TableSection(L["Github Account"])
-					{
-						UserLabel,
-					},
 					new TableSection(L["Last Acitivity Stamp"])
 					{
 						LastActivityStampLabel,
@@ -98,15 +102,10 @@ namespace keep.grass
 					},
 				},
 			};
+			UpdateButton.Text = L["Update"];
 			var ButtonFrame = new Grid().HorizontalJustificate
 			(
-				new Button
-				{
-					VerticalOptions = LayoutOptions.Center,
-					HorizontalOptions = LayoutOptions.FillAndExpand,
-					Text = L["Update"],
-					Command = new Command(async o => await Domain.ManualUpdateLastPublicActivityAsync()),
-				},
+                UpdateButton,
 				new Button
 				{
 					VerticalOptions = LayoutOptions.Center,
@@ -157,8 +156,9 @@ namespace keep.grass
 			//	Indicator を表示中にレイアウトを変えてしまうと簡潔かつ正常に Indicator を再表示できないようなので、問答無用でテキストを表示してしまう。
 			LastActivityStampLabel.ShowText();
 			LeftTimeLabel.ShowText();
+			UpdateButton.ShowText();
 
-			OnUpdateLastPublicActivity();
+			OnUpdateLastPublicActivity(Settings.UserName);
 		}
 
 		protected override void OnAppearing()
@@ -176,15 +176,25 @@ namespace keep.grass
 
 		public void OnStartQuery()
 		{
+			OldLastPublicActivity = new[]
+			{
+				Domain.GetLastPublicActivity(Settings.UserName),
+				DateTime.Now.AddDays(-1).AddMinutes(1),
+			}
+			.Max();
 			LastActivityStampLabel.ShowIndicator();
 			LeftTimeLabel.ShowIndicator();
+			UpdateButton.ShowIndicator();
 		}
-		public void OnUpdateLastPublicActivity()
+		public void OnUpdateLastPublicActivity(string User)
 		{
-			LastActivityStampLabel.Text = Domain.LastPublicActivity.IsDefault() ?
-				"":
-				Domain.LastPublicActivity.ToString("yyyy-MM-dd HH:mm:ss");
-			LastActivityStampLabel.TextColor = Color.Default;
+			if (Settings.UserName == User)
+			{
+				LastActivityStampLabel.Text = Domain.GetLastPublicActivity(Settings.UserName).IsDefault() ?
+					"" :
+					Domain.GetLastPublicActivity(Settings.UserName).ToString("yyyy-MM-dd HH:mm:ss");
+				LastActivityStampLabel.TextColor = Color.Default;
+			}
 		}
 		public void OnErrorInQuery()
 		{
@@ -193,8 +203,24 @@ namespace keep.grass
 		}
 		public void OnEndQuery()
 		{
+			if (OldLastPublicActivity < Domain.GetLastPublicActivity(Settings.UserName))
+			{
+				Debug.WriteLine("Start LastPublicActivity");
+				var Now = DateTime.Now;
+				CircleGraph.AsView().Animate
+			   	(
+					"LastPublicActivityAnimation",
+					d => UpdateLeftTime(OldNow, (OldLastPublicActivity = Now.Date + TimeSpan.FromMinutes(d))),
+					(OldLastPublicActivity - Now.Date).TotalMinutes,
+					(Domain.GetLastPublicActivity(Settings.UserName) - Now.Date).TotalMinutes,
+					16,
+					500,
+					Easing.SinOut
+				);
+			}
 			LastActivityStampLabel.ShowText();
 			LeftTimeLabel.ShowText();
+			UpdateButton.ShowText();
 			StartUpdateLeftTimeTask();
 		}
 
@@ -204,11 +230,11 @@ namespace keep.grass
 			var User = Settings.UserName;
 			if (!String.IsNullOrWhiteSpace(User))
 			{
-				if (UserLabel.Text != User)
+				if (CircleGraph.AltText != User)
 				{
 					CircleGraph.Image = null;
-					CircleGraph.Update();
-					UserLabel.ImageSource = null;
+					CircleGraph.AltText = User;
+					CircleGraph.AltTextColor = Color.Black;
 					AlphaFactory.MakeImageSourceFromUrl(GitHub.GetIconUrl(User))
 						.ContinueWith
 			            (
@@ -217,18 +243,27 @@ namespace keep.grass
 		            			() =>
 								{
 									CircleGraph.Image = AlphaImageProxy.GetFromCache(GitHub.GetIconUrl(User));
-									CircleGraph.Update();
-									UserLabel.ImageSource = t.Result;
+									CircleGraph.AsView().Animate
+									(
+										"ImageAnimation",
+										d => CircleGraph.ImageAlpha = (byte)d,
+										0.0,
+										255.0,
+										16,
+										1000,
+										Easing.SinIn
+									);
+
+
 								}
 				           )
 			           	);
-					UserLabel.Text = User;
-					UserLabel.TextColor = Color.Default;
-					if (!Settings.IsValidUserName)
+
+					if (!Settings.GetIsValidUserName(Settings.UserName))
 					{
 						ClearActiveInfo();
 					}
-					if (default(DateTime) == Domain.LastPublicActivity)
+					if (default(DateTime) == Domain.GetLastPublicActivity(Settings.UserName))
 					{
 						Task.Run(() => Domain.ManualUpdateLastPublicActivityAsync());
 					}
@@ -237,10 +272,8 @@ namespace keep.grass
 			else
 			{
 				CircleGraph.Image = null;
-				CircleGraph.Update();
-				UserLabel.ImageSource = null;
-				UserLabel.Text = L["unspecified"];
-				UserLabel.TextColor = Color.Gray;
+				CircleGraph.AltText = L["unspecified"];
+				CircleGraph.AltTextColor = Color.Gray;
 				ClearActiveInfo();
 			}
 
@@ -259,13 +292,9 @@ namespace keep.grass
 				}
 			}
 		}
-		public static float TimeToAngle(DateTime Time)
-		{
-			return (float)((Time.TimeOfDay.Ticks * 360) / TimeSpan.FromDays(1).Ticks);
-		}
 		public void ClearActiveInfo()
 		{
-			Domain.LastPublicActivity = default(DateTime);
+			//SetLastPublicActivity(Settings.UserName, default(DateTime));
 			LastActivityStampLabel.Text = "";
 			LeftTimeLabel.Text = "";
 		}
@@ -282,8 +311,43 @@ namespace keep.grass
 					{
 						while (null != UpdateLeftTimeTask)
 						{
-							UpdateLeftTimeTaskLastStamp = DateTime.Now;
-							Device.BeginInvokeOnMainThread(() => UpdateLeftTime());
+							var Now = DateTime.Now;
+							UpdateLeftTimeTaskLastStamp = Now;
+							//if (!IsInAnimation(Now))
+							if
+							(
+								null != CircleGraph &&
+								null != CircleGraph.AsView() &&
+								!CircleGraph.AsView().AnimationIsRunning("NowAnimation") &&
+								!CircleGraph.AsView().AnimationIsRunning("LastPublicActivityAnimation")
+							)
+							{
+								if (OldNow.AddSeconds(60) < Now)
+								{
+									Debug.WriteLine("Start AnimateNow");
+									OldNow = new[]
+									{
+										OldNow,
+										Now.AddDays(-1),
+									}
+									.Max();
+									CircleGraph.AsView().Animate
+									(
+										"NowAnimation",
+										d => UpdateLeftTime((OldNow = Now.Date + TimeSpan.FromMinutes(d)), OldLastPublicActivity),
+										(OldNow - Now.Date).TotalMinutes,
+										(Now.AddMilliseconds(500) - Now.Date).TotalMinutes,
+										16,
+										500,
+										Easing.SinOut
+									);
+								}
+								else
+								{
+									OldNow = Now;
+									Device.BeginInvokeOnMainThread(() => UpdateLeftTime(Now, Domain.GetLastPublicActivity(Settings.UserName)));
+								}
+							}
 							Task.Delay(1000 - DateTime.Now.Millisecond).Wait();
 						}
 					}
@@ -308,30 +372,40 @@ namespace keep.grass
 			UpdateLeftTimeTask = null;
 		}
 
-		protected void UpdateLeftTime()
+		protected void UpdateLeftTime(DateTime Now, DateTime LastPublicActivity)
 		{
-			CircleGraph.SetStartAngle(TimeToAngle(DateTime.Now));
-			if (default(DateTime) != Domain.LastPublicActivity)
+			CircleGraph.SetStartAngle(AlphaDomain.TimeToAngle(Now));
+			if (default(DateTime) != LastPublicActivity)
 			{
-				var Now = DateTime.Now;
 				var Today = Now.Date;
-				var LimitTime = Domain.LastPublicActivity.AddHours(24);
+				var LimitTime = LastPublicActivity.AddHours(24);
 				var LeftTime = LimitTime - Now;
 				LeftTimeLabel.Text = Math.Floor(LeftTime.TotalHours).ToString() +LeftTime.ToString("\\:mm\\:ss");
 				var LeftTimeColor = AlphaDomain.MakeLeftTimeColor(LeftTime);
 
 				LeftTimeLabel.TextColor = LeftTimeColor;
+				CircleGraph.AltTextColor = LeftTimeColor;
 
-				CircleGraph.SetStartAngle(TimeToAngle(Now));
 				CircleGraph.Data = AlphaDomain.MakeSlices(LeftTime, LeftTimeColor);
 
-				if (Friends?.Any() ?? false)
+				var FontSize = 14.0f;
+				if (CircleGraph.GraphSize < FontSize * 9.0f)
 				{
 					CircleGraph.SatelliteTexts = null;
 				}
 				else
+				if (CircleGraph.GraphSize < FontSize * 12.0f)
 				{
-					CircleGraph.SatelliteTexts = AlphaDomain.MakeSatelliteTexts(Now, Domain.LastPublicActivity);
+					CircleGraph.SatelliteTexts = AlphaDomain.MakeSatelliteTexts(Now, LastPublicActivity, 6);
+				}
+				else
+				if (CircleGraph.GraphSize < FontSize * 16.0f)
+				{
+					CircleGraph.SatelliteTexts = AlphaDomain.MakeSatelliteTexts(Now, LastPublicActivity, 3);
+				}
+				else
+				{
+					CircleGraph.SatelliteTexts = AlphaDomain.MakeSatelliteTexts(Now, LastPublicActivity);
 				}
 
 				Task.Run(() => Domain.AutoUpdateLastPublicActivityAsync());
@@ -355,7 +429,16 @@ namespace keep.grass
 					}
 				);
 			}
-			CircleGraph.Update();
+
+			for (var i = 0; i < Friends?.Count(); ++i)
+			{
+				var Friend = Settings.GetFriend(i);
+				var LimitTime = Domain.GetLastPublicActivity(Friend).AddHours(24);
+				var LeftTime = LimitTime - Now;
+				var FriendLable = Friends[i];
+				FriendLable.TextColor = AlphaDomain.MakeLeftTimeColor(LeftTime);
+			}
+
 			//Debug.WriteLine("AlphaMainPage::UpdateLeftTime::LeftTime = " +LeftTimeLabel.Text);
 		}
 
