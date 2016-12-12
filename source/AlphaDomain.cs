@@ -67,15 +67,24 @@ namespace keep.grass
 			//Debug.WriteLine("AlphaDomain::AutoUpdateInfoAsync");
 			if (NextUpdateLastPublicActivityStamp <= DateTime.Now)
 			{
-				await UpdateLastPublicActivityAsync();
+				await UpdateAllLastPublicActivityAsync();
+			}
+		}
+		public async Task BackgroundUpdateLastPublicActivityAsync()
+		{
+			//Debug.WriteLine("AlphaDomain::AutoUpdateInfoAsync");
+			var User = Settings.UserName;
+			if (NextUpdateLastPublicActivityStamp <= DateTime.Now && !string.IsNullOrWhiteSpace(User))
+			{
+				await UpdateLastPublicActivityAsync(User);
 			}
 		}
 		public async Task ManualUpdateLastPublicActivityAsync()
 		{
 			Debug.WriteLine("AlphaDomain::ManualUpdateInfoAsync");
-			await UpdateLastPublicActivityAsync();
+			await UpdateAllLastPublicActivityAsync();
 		}
-		private async Task UpdateLastPublicActivityAsync(string User)
+		private async Task UpdateLastPublicActivityCoreAsync(string User)
 		{
 			var OldLastPublicActivity = GetLastPublicActivity(User);
 			var NewLastPublicActivity = GitHub.GetLastPublicActivity
@@ -94,41 +103,44 @@ namespace keep.grass
 
 			if (OldLastPublicActivity != NewLastPublicActivity)
 			{
-				OnUpdateLastPublicActivity(User);
+				OnUpdateLastPublicActivity(User, NewLastPublicActivity);
 			}
 			Settings.SetIsValidUserName(User, true);
 		}
-		private async Task UpdateLastPublicActivityAsync()
+		private async Task UpdateAllLastPublicActivityAsync()
 		{
 			Debug.WriteLine("AlphaDomain::UpdateLastPublicActivityAsync");
 			PreviousUpdateLastPublicActivityStamp = DateTime.Now;
-			var User = Settings.UserName;
-			var Friends = Settings.GetFriendList();
-			if (!String.IsNullOrWhiteSpace(User) || Friends.Any())
-			{
-				try
-				{
-					OnStartQuery();
 
-					if (!String.IsNullOrWhiteSpace(User))
-					{
-						await UpdateLastPublicActivityAsync(Settings.UserName);
-					}
-					foreach (var Friend in Friends)
-					{
-						await UpdateLastPublicActivityAsync(Friend);
-					}
-				}
-				catch (Exception err)
+			await UpdateLastPublicActivityAsync
+			(
+				new[] { Settings.UserName, }
+					.Union(Settings.GetFriendList())
+					.Where(i => !string.IsNullOrWhiteSpace(i))
+					.ToArray()				
+			);
+		}
+		private async Task UpdateLastPublicActivityAsync(params string[] Users)
+		{
+			Debug.WriteLine("AlphaDomain::UpdateLastPublicActivityAsync");
+			PreviousUpdateLastPublicActivityStamp = DateTime.Now;
+			try
+			{
+				OnStartQuery();
+				foreach (var User in Users)
 				{
-					Debug.WriteLine("AlphaDomain::UpdateLastPublicActivityAsync::catch::err" + err.ToString());
-					RefreshHttpClient();
-					OnErrorInQuery();
+					await UpdateLastPublicActivityCoreAsync(User);
 				}
-				finally
-				{
-					OnEndQuery();
-				}
+			}
+			catch (Exception err)
+			{
+				Debug.WriteLine("AlphaDomain::UpdateLastPublicActivityAsync::catch::err" + err.ToString());
+				RefreshHttpClient();
+				OnErrorInQuery();
+			}
+			finally
+			{
+				OnEndQuery();
 			}
 		}
 		public void OnStartQuery()
@@ -141,7 +153,7 @@ namespace keep.grass
 				}
 			);
 		}
-		public void OnUpdateLastPublicActivity(string User)
+		public void OnUpdateLastPublicActivity(string User, DateTime LastPublicActivity)
 		{
 			Device.BeginInvokeOnMainThread
 			(
@@ -149,9 +161,9 @@ namespace keep.grass
 				{
 					if (User == Settings.UserName)
 					{
-						UpdateAlerts();
+						UpdateAlerts(LastPublicActivity);
 					}
-					AlphaFactory.GetApp()?.Main?.OnUpdateLastPublicActivity(User);
+					AlphaFactory.GetApp()?.Main?.OnUpdateLastPublicActivity(User, LastPublicActivity);
 				}
 			);
 		}
@@ -176,60 +188,56 @@ namespace keep.grass
 			);
 		}
 
-		public virtual void UpdateAlerts()
+		public virtual void UpdateAlerts(DateTime LastPublicActivity)
 		{
 			CancelAllAlerts();
-			if (!String.IsNullOrWhiteSpace(Settings.UserName))
+			if (default(DateTime) < LastPublicActivity)
 			{
-				var LastPublicActivity = GetLastPublicActivity(Settings.UserName);
-				if (default(DateTime) < LastPublicActivity)
+				Debug.WriteLine("AlphaDomain::UpdateAlerts");
+				var Limit = LastPublicActivity.AddHours(24);
+				var LastPublicActivityInfo = L["Last Acitivity Stamp"] + ": " + LastPublicActivity.ToString("yyyy-MM-dd HH:mm:ss");
+				var Now = DateTime.Now;
+				int i = 0;
+				foreach (var Span in Settings.AlertTimeSpanTable)
 				{
-					Debug.WriteLine("AlphaDomain::UpdateAlerts");
-					var Limit = LastPublicActivity.AddHours(24);
-					var LastPublicActivityInfo = L["Last Acitivity Stamp"] + ": " + LastPublicActivity.ToString("yyyy-MM-dd HH:mm:ss");
-					var Now = DateTime.Now;
-					int i = 0;
-					foreach (var Span in Settings.AlertTimeSpanTable)
+					++i;
+					var AlertStamp = Limit - Span;
+					if (Settings.GetAlert(Span) && Now < AlertStamp)
 					{
-						++i;
-						var AlertStamp = Limit - Span;
-						if (Settings.GetAlert(Span) && Now < AlertStamp)
-						{
-							ShowAlert
-							(
-								Settings.AlertTimeSpanToDisplayName(L, Span),
-								LastPublicActivityInfo,
-								i,
-								AlertStamp
-							);
-						}
-						else
-						{
-							CancelAlert(i);
-						}
+						ShowAlert
+						(
+							Settings.AlertTimeSpanToDisplayName(L, Span),
+							LastPublicActivityInfo,
+							i,
+							AlertStamp
+						);
 					}
-					i = 100;
-					foreach (var Span in Settings.AlertDailyTimeTable)
+					else
 					{
-						++i;
-						if (Settings.GetDailyAlert(Span))
-						{
-							var AlertStamp = (Now.TimeOfDay < Span ? Now : Now.AddDays(1))
-								- Now.TimeOfDay
-								+ Span;
-							var LeftTime = Limit - AlertStamp;
-							ShowAlert
-							(
-								Settings.AlertLeftTimeToDisplayName(L, LeftTime),
-								LastPublicActivityInfo,
-								i,
-								AlertStamp
-							);
-						}
-						else
-						{
-							CancelAlert(i);
-						}
+						CancelAlert(i);
+					}
+				}
+				i = 100;
+				foreach (var Span in Settings.AlertDailyTimeTable)
+				{
+					++i;
+					if (Settings.GetDailyAlert(Span))
+					{
+						var AlertStamp = (Now.TimeOfDay < Span ? Now : Now.AddDays(1))
+							- Now.TimeOfDay
+							+ Span;
+						var LeftTime = Limit - AlertStamp;
+						ShowAlert
+						(
+							Settings.AlertLeftTimeToDisplayName(L, LeftTime),
+							LastPublicActivityInfo,
+							i,
+							AlertStamp
+						);
+					}
+					else
+					{
+						CancelAlert(i);
 					}
 				}
 			}

@@ -14,13 +14,12 @@ namespace keep.grass.UWP
 {
     class OmegaDomain : AlphaDomain
     {
-        public override void UpdateAlerts()
+        public override void UpdateAlerts(DateTime LastPublicActivity)
         {
-            base.UpdateAlerts();
+            base.UpdateAlerts(LastPublicActivity);
 
             if
             (
-                String.IsNullOrWhiteSpace(Settings.UserName) ||
                 default(DateTime) == LastPublicActivity
             )
             {
