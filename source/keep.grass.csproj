@@ -75,7 +75,6 @@
     <Compile Include="AlphaDetailPage.cs" />
     <Compile Include="AlphaImageProxy.cs" />
     <Compile Include="ValueEx.cs" />
-    <Compile Include="Variables.cs" />
     <Compile Include="AlphaActivityIndicatorButton.cs" />
     <Compile Include="AlphaUserCircleGraph.cs" />
   </ItemGroup>
