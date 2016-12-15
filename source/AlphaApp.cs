@@ -6,6 +6,9 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.IO;
+using Microsoft.Azure.Mobile;
+using Microsoft.Azure.Mobile.Crashes;
+using Microsoft.Azure.Mobile.Analytics;
 
 namespace keep.grass
 {
@@ -17,6 +20,8 @@ namespace keep.grass
 
 		public AlphaApp()
 		{
+			MobileCenter.Start(typeof(Analytics), typeof(Crashes));
+
 			AlphaFactory.SetApp(this);
 
 			MainPage = Navigation = new NavigationPage
